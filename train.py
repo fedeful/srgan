@@ -23,10 +23,8 @@ final_path = './pesi'
 partial_image = './printed_image'
 
 
-# MNIST Dataset
 train_dataset = dsets.ImageFolder(root='./CelebA/',
                                   transform=transforms.ToTensor())
-
 
 train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                            batch_size=batch_size,
@@ -67,7 +65,7 @@ if cuda:
 
 b_fraction = len(train_dataset)/batch_size
 
-'''
+
 
 for epoch in np.arange(0, number_epochs):
     for i, data in enumerate(train_loader):
@@ -102,7 +100,7 @@ for epoch in np.arange(0, number_epochs):
                                 print_transform)
         g_optimizer.step()
 
-'''
+
 
 ones_labels = Variable(torch.ones(batch_size, 1))
 zeros_labels = Variable(torch.ones(batch_size, 1))
