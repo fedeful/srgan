@@ -66,7 +66,6 @@ if cuda:
 b_fraction = len(train_dataset)/batch_size
 
 
-
 for epoch in np.arange(0, number_epochs):
     for i, data in enumerate(train_loader):
 
@@ -87,7 +86,7 @@ for epoch in np.arange(0, number_epochs):
             high_resolution_fake = g_net(Variable(low_resolution_real))
 
         criterion_1.zero_grad()
-        tmp = vgg16cut(high_resolution_real)
+        #tmp = vgg16cut(high_resolution_real)
 
         # function(OUTPUT, TARGET)
         content_loss = criterion_1(high_resolution_fake, high_resolution_real)
@@ -145,10 +144,11 @@ for epoch in np.arange(0, number_epochs):
         #-----------------GENERATOR----------------
         g_net.zero_grad()
 
-        #real_features = Variable(feature_extractor(high_res_real).data)
-        #fake_features = feature_extractor(high_res_fake)
+        tmp = vgg16cut(high_resolution_real)
+        real = Variable(vgg16cut(high_resolution_real).data)
+        fake = vgg16cut(high_resolution_fake)
 
-        g_content_loss = criterion_1(high_resolution_fake, high_resolution_real)
+        g_content_loss = criterion_1(high_resolution_fake, high_resolution_real) + 0.006*criterion_1(fake, real)
 
         g_adversarial_loss = criterion_2(d_net(high_resolution_fake), ones_labels)
 
