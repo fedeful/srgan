@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from torch.optim import Adam
 from models import SRGanDiscriminator, SRGanGenerator, VggCutted
-from printutils import print_partial_result
+from printutils import print_partial_result, NetworkInfoPrinter
 
 number_epochs = 1
 batch_size = 1
@@ -21,6 +21,7 @@ cutted_layer_vgg = 5
 cuda = False
 final_path = './pesi'
 partial_image = './printed_image'
+
 
 
 train_dataset = dsets.ImageFolder(root='./CelebA/',
@@ -64,8 +65,8 @@ if cuda:
     criterion_2.cuda()
 
 b_fraction = len(train_dataset)/batch_size
-
-
+nip = NetworkInfoPrinter('./prova/pippo', number_epochs, len(train_dataset), batch_size)
+d = {}
 for epoch in np.arange(0, number_epochs):
     for i, data in enumerate(train_loader):
 
@@ -91,8 +92,9 @@ for epoch in np.arange(0, number_epochs):
         # function(OUTPUT, TARGET)
         content_loss = criterion_1(high_resolution_fake, high_resolution_real)
 
-        if i % 10 == 0:
-            print('Iteration [%02d/%02d] Epoch [%02d/%02d] Generator content loss: %.5f' % (i, len(train_dataset)/batch_size, epoch, number_epochs, content_loss))
+        if i % 1 == 0:
+            d['Generator Loss'] = ('%s: %.7f', content_loss)
+            nip.log_line(epoch, i, d)
         content_loss.backward()
         if i % 10000 == 0:
             print_partial_result(low_resolution_real[0], high_resolution_real.data[0], high_resolution_fake.data[0],

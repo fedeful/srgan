@@ -10,6 +10,46 @@ from torch.optim import Adam
 from PIL import Image
 
 
+class NetworkInfoPrinter:
+
+    def __init__(self, path, epochs, dataset_len, batch_size):
+        self.path = path
+        self.epochs = epochs
+        self.dataset_len = dataset_len
+        self.batch_size = batch_size
+
+        if path == '':
+            self.fm = False
+        else:
+            self.fm = True
+            self.info_file = open(self.path, 'w')
+
+    def title_line(self, info):
+        if self.fm:
+            self.info_file.write(info+'\n')
+        else:
+            print(info)
+
+    def log_line(self, epoch, batch_iteration, dictionary_info):
+
+        info = 'Epoch: [%02d/%02d] ' % (epoch, self.epochs)
+        info += 'Iteration: [%02d/%02d] ' % (batch_iteration, self.dataset_len / self.batch_size)
+        for k, v in dictionary_info.iteritems():
+            info += v[0] % (k, v[1])
+        if self.fm:
+            self.info_file.write(info+'\n')
+        else:
+            print(info)
+
+    def end_print(self):
+
+        self.info_file.close()
+
+    def __del__(self):
+        if self.fm:
+            self.info_file.close()
+
+
 def save_img(name, path, img, transform):
 
     result = Image.fromarray((img).astype(np.uint8))
