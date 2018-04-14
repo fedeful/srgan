@@ -56,6 +56,17 @@ def save_img(name, path, img, transform):
     result.save('%s/%s' % (path, name))
 
 
+def save_partial_result(name, low_resolution, high_resolution_real, high_resolution_fake, transform):
+
+    lr_image = transform(low_resolution)
+    hrr_image = transform(high_resolution_real)
+    hrf_image = transform(high_resolution_fake)
+
+    lr_image.save('./printed_image/low_resolution/%s.png' % name)
+    hrr_image.save('./printed_image/high_resolution_real/%s.png' % name)
+    hrf_image.save('./printed_image/high_resolution_fake/%s.png' % name)
+
+
 def print_partial_result(low_resolution, high_resolution_real, high_resolution_fake, transform):
 
     lr_image = np.asarray(transform(low_resolution))
@@ -66,10 +77,10 @@ def print_partial_result(low_resolution, high_resolution_real, high_resolution_f
 
     #figure.add_subplot(1, 3, 1)
     plt.imshow(lr_image)
-
+    plt.show()
     #figure.add_subplot(1, 3, 2)
     plt.imshow(hrr_image)
-
+    plt.show()
     #figure.add_subplot(1, 3, 3)
     plt.imshow(hrf_image)
 
