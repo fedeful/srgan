@@ -42,8 +42,8 @@ class NetworkInfoPrinter:
             print(info)
 
     def end_print(self):
-
-        self.info_file.close()
+        if self.fm:
+            self.info_file.close()
 
     def __del__(self):
         if self.fm:

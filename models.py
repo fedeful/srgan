@@ -54,74 +54,76 @@ class SRGanGenerator(nn.Module):
         self.pr = nn.PReLU()
 
         for i in np.arange(0, residual_blocks_number):
-            name = 'residual_blocks_number_%03d'.format(i)
+            name = 'residual_blocks_number_%03d' % (i)
             self.add_module(name, ResidualBlock())
 
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1)
         self.bn = nn.BatchNorm2d(num_features=64)
 
         for i in np.arange(0, second_blocks_number):
-            name = 'second_blocks_number_%03d'.format(i)
+            name = 'second_blocks_number_%03d' % (i)
             self.add_module(name, SecondGeneratorBlock())
 
         self.conv3 = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=9, stride=1, padding=4)
 
     def forward(self, x):
 
-        y = self.pr(self.conv1(x))
+        x = self.pr(self.conv1(x))
 
-        tmp = y.clone()
+        tmp = x.clone()
         for i in np.arange(0, self.rbn):
-            name = 'residual_blocks_number_%03d'.format(i)
+            name = 'residual_blocks_number_%03d' % (i)
             tmp = self.__getattr__(name)(tmp)
 
-        y = self.bn(self.conv2(tmp)) + y
+        x = self.bn(self.conv2(tmp)) + x
 
         for i in np.arange(0, self.sbn):
-            name = 'second_blocks_number_%03d'.format(i)
-            y = self.__getattr__(name)(y)
+            name = 'second_blocks_number_%03d' % (i)
+            x = self.__getattr__(name)(x)
 
-        return self.conv3(y)
+        return self.conv3(x)
 
 
 class SRGanDiscriminator(nn.Module):
-    def __init__(self, img_size):
+    def __init__(self):
         super(SRGanDiscriminator, self).__init__()
 
         self.conv = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=1, padding=1)
-        self.lr = nn.LeakyReLU()
+        self.lr = nn.LeakyReLU(0.2)
 
         self.conv1 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=2, padding=1)
         self.bn1 = nn.BatchNorm2d(num_features=64)
-        self.lr1 = nn.LeakyReLU()
+        self.lr1 = nn.LeakyReLU(0.2)
 
         self.conv2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
         self.bn2 = nn.BatchNorm2d(num_features=128)
-        self.lr2 = nn.LeakyReLU()
+        self.lr2 = nn.LeakyReLU(0.2)
 
         self.conv3 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=2, padding=1)
         self.bn3 = nn.BatchNorm2d(num_features=128)
-        self.lr3 = nn.LeakyReLU()
+        self.lr3 = nn.LeakyReLU(0.2)
 
         self.conv4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
         self.bn4 = nn.BatchNorm2d(num_features=256)
-        self.lr4 = nn.LeakyReLU()
+        self.lr4 = nn.LeakyReLU(0.2)
 
         self.conv5 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=2, padding=1)
         self.bn5 = nn.BatchNorm2d(num_features=256)
-        self.lr5 = nn.LeakyReLU()
+        self.lr5 = nn.LeakyReLU(0.2)
 
         self.conv6 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=1, padding=1)
         self.bn6 = nn.BatchNorm2d(num_features=512)
-        self.lr6 = nn.LeakyReLU()
+        self.lr6 = nn.LeakyReLU(0.2)
 
         self.conv7 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, stride=2, padding=1)
         self.bn7 = nn.BatchNorm2d(num_features=512)
-        self.lr7 = nn.LeakyReLU()
+        self.lr7 = nn.LeakyReLU(0.2)
 
         self.dense1 = nn.Linear(8*8*512, 1024)
-        self.lr8 = nn.LeakyReLU()
+        self.lr8 = nn.LeakyReLU(0.2)
         self.dense2 = nn.Linear(1024, 1)
+
+        self.sig = nn.Sigmoid()
 
     def forward(self, x):
         y = self.lr(self.conv(x))
@@ -136,6 +138,5 @@ class SRGanDiscriminator(nn.Module):
 
         y = y.view(y.size(0), -1)
         y = self.lr8(self.dense1(y))
-        return F.sigmoid(self.dense2(y))
-
-
+        output = self.sig(self.dense2(y))
+        return output
