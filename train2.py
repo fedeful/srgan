@@ -23,12 +23,14 @@ res_blocks = 16
 up_blocks = 2
 cutted_layer_vgg = 5
 out_image_flag = True
-pre_train_flag = False
+pre_train_flag = True
 continue_adv_train = False
-cuda = True
+cuda = False
 final_path = './weights'
 partial_image = './printed_image'
-dataset_folder = '../../remote/datasets/CelebA/'
+#dataset_folder = '../../remote/datasets/CelebA/'
+dataset_folder = 'CelebA/'
+
 
 
 #-------------TRAIN-LOADER---------------#
@@ -53,10 +55,26 @@ print_transform = transforms.Compose([
 
 low_res_transform = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.Resize(low_res_size),
+    transforms.Resize(high_res_size/4),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225])])
+
+low_res_transform2 = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize(high_res_size/8),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])])
+
+
+low_res_transform3 = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.Resize(high_res_size/16),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225])])
+
 
 
 norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -94,31 +112,49 @@ if cuda:
 
 
 #-------GENERATOR-PRE-TRAINING------------#
+
 if pre_train_flag:
 
     nips.title_line('GENERAOTR PRE-TRAINING')
     for epoch in np.arange(0, number_epochs):
         for i, data in enumerate(train_loader):
 
-            high_resolution_real, _ = data
+            high_resolution_real, lab = data
+
 
             low_resolution = torch.FloatTensor(int(high_resolution_real.shape[0]), ch_size, low_res_size, low_res_size)
+            low_resolution2 = torch.FloatTensor(int(high_resolution_real.shape[0]), ch_size, high_res_size/16, high_res_size/16)
 
             for j in np.arange(0, int(high_resolution_real.shape[0])):
                 low_resolution[j] = low_res_transform(high_resolution_real[j])
+                low_resolution2[j] = low_res_transform2(high_resolution_real[j])
                 high_resolution_real[j] = norm(high_resolution_real[j])
 
             if cuda:
                 high_resolution_real = Variable(high_resolution_real).cuda()
                 high_resolution_fake = g_net(Variable(low_resolution).cuda())
+                high_resolution_fake2 = g_net(Variable(low_resolution2).cuda())
             else:
                 high_resolution_real = Variable(high_resolution_real)
                 high_resolution_fake = g_net(Variable(low_resolution))
+                high_resolution_fake2 = g_net(Variable(low_resolution2).cuda())
+
+            save_image(u2(low_resolution[0]),
+                       'prova/%s_%s.png' % (epoch, 1))
+            save_image(u2(low_resolution2[0]),
+                       'prova/%s_%s.png' % (epoch, 2))
+
+            for i in np.arange(0, 2):
+                g_net.zero_grad()
+                content_loss = criterion_1(high_resolution_fake, high_resolution_real)
+                content_loss.backward()
+                g_optimizer.step()
 
             g_net.zero_grad()
             content_loss = criterion_1(high_resolution_fake, high_resolution_real)
             content_loss.backward()
             g_optimizer.step()
+
 
             if i % 50 == 0:
                 tmp_dic = dict()
@@ -132,6 +168,7 @@ if pre_train_flag:
                                     high_resolution_real.data[0].cpu(),
                                     high_resolution_fake.data[0].cpu(),
                                     print_transform)
+
             '''
             if i % 1000 == 0 and out_image_flag:
                 save_image(u2(high_resolution_real.data[0]),
@@ -236,3 +273,6 @@ nips.end_print()
 
 torch.save(g_net.state_dict(), '%s/generator_final.pth' % (final_path))
 torch.save(d_net.state_dict(), '%s/discriminator_final.pth' % (final_path))
+
+
+
