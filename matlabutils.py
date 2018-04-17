@@ -13,12 +13,12 @@ class RAPDatasetTrain(Dataset):
 
     def __init__(self, annotations, root_dir, transform=None):
         self.db = RAP(annotations, 0)
-        self.labels_name = [db.attr_eng[i][0][0] for i in np.arange(0, db.labels.shape[1])]
+        self.labels_name = [self.db.attr_eng[i][0][0] for i in np.arange(0, self.db.labels.shape[1])]
         self.root_dir = root_dir
         self.transform = transform
 
     def __len__(self):
-        return len(self.db.train_ind.shape[0])
+        return self.db.train_ind.shape[0]
 
     def __getitem__(self, idx):
         converted_index = self.db.train_ind[idx]
@@ -27,10 +27,12 @@ class RAPDatasetTrain(Dataset):
         absolute_image_name = os.path.join(self.root_dir, relative_image_name)
         image = io.imread(absolute_image_name)
 
+        if self.transform:
+            image = self.transform(image)
+
+
         sample = {'image': image, 'labels': self.db.labels[converted_index]}
 
-        if self.transform:
-            sample = self.transform(sample)
 
         return sample
 
