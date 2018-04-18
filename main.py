@@ -219,8 +219,8 @@ def adversarial_training(epoch, iter_print_loss, iter_print_image):
         g_optimizer.step()
 
         total_round += 1
-        break
 
+        break
         if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Discriminator Loss'] = ('%s: %.7f ', d_loss)
@@ -246,6 +246,7 @@ def testing(epoch, iter_print_loss, iter_print_image):
     g_net.eval()
     d_net.eval()
 
+
     total_round = 0.
     avg_d_loss = 0.
     avg_g_content_loss = 0.
@@ -257,39 +258,40 @@ def testing(epoch, iter_print_loss, iter_print_image):
         high_resolution_real, low_resolution = data['imagehig'], data['imagelow']
 
         if cuda:
-            high_resolution_real = Variable(high_resolution_real.cuda())
-            high_resolution_fake = g_net(Variable(low_resolution).cuda())
+            high_resolution_real = Variable(high_resolution_real.cuda(), volatile=True)
+            high_resolution_fake = g_net(Variable(low_resolution, volatile=True).cuda())
+
         else:
-            high_resolution_real = Variable(high_resolution_real)
-            high_resolution_fake = g_net(Variable(low_resolution))
+            high_resolution_real = Variable(high_resolution_real, volatile=True)
+            high_resolution_fake = g_net(Variable(low_resolution, volatile=True))
 
 
         # ----------------DISCRIMINATOR--------------
 
         d_loss = criterion_2(d_net(high_resolution_real), ones_labels) + \
-                             criterion_2(d_net(Variable(high_resolution_fake.data)), zeros_labels)
-        avg_d_loss += d_loss.data[0]
+                             criterion_2(d_net(Variable(high_resolution_fake.data, volatile=True)), zeros_labels).data[0]
+        avg_d_loss += d_loss
 
 
         # -----------------GENERATOR----------------
 
-        real = Variable(vgg16cut(high_resolution_real).data)
+        real = Variable(vgg16cut(high_resolution_real).data, volatile=True)
         fake = vgg16cut(high_resolution_fake)
 
-        g_content_loss = criterion_1(high_resolution_fake, high_resolution_real) + beta * criterion_1(fake, real)
-        avg_g_content_loss += g_content_loss.data[0]
+        gcl = (criterion_1(high_resolution_fake, high_resolution_real) + beta * criterion_1(fake, real)).data[0]
+        avg_g_content_loss += gcl
 
-        g_adversarial_loss = criterion_2(d_net(high_resolution_fake), ones_labels)
-        avg_g_adv_loss += g_adversarial_loss.data[0]
+        gal = criterion_2(d_net(high_resolution_fake), ones_labels).data[0]
+        avg_g_adv_loss += gal
 
-        g_total_loss = g_content_loss + lamb * g_adversarial_loss
-        avg_g_tot_loss += g_total_loss.data[0]
+        g_total_loss = gcl + lamb * gal
+        avg_g_tot_loss += g_total_loss
 
         if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Discriminator Loss'] = ('%s: %.7f ', d_loss)
-            tmp_dic['Generator Content Loss'] = ('%s: %.7f ', g_content_loss)
-            tmp_dic['Generator Adversarial Loss'] = ('%s: %.7f ', g_adversarial_loss)
+            tmp_dic['Generator Content Loss'] = ('%s: %.7f ', gcl)
+            tmp_dic['Generator Adversarial Loss'] = ('%s: %.7f ', gal)
             tmp_dic['Generator Total Loss'] = ('%s: %.7f ', g_total_loss)
             nips.log_line(epoch, i, tmp_dic)
             nipfts.log_line(epoch, i, tmp_dic)
