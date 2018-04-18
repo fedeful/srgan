@@ -2,26 +2,25 @@ from __future__ import print_function
 import torch
 import torch.nn as nn
 import torchvision
-import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 from torch.autograd import Variable
-import numpy as np
-import matplotlib.pyplot as plt
 from torch.optim import Adam
 from models import SRGanDiscriminator, SRGanGenerator, VggCutted
-from printutils import print_partial_result, NetworkInfoPrinter
+from logdatautils.printutils import NetworkInfoPrinter
+from logdatautils.lossplot import save_loss_plot, save_2loss_plot
 from torchvision.utils import save_image
-from datasetloaders.rap_dataset import RAPDatasetTest, RAPDatasetTrainSRgan, RAPDatasetTestSRgan
+from datasetloaders.rap_dataset import RAPDatasetTrainSRgan, RAPDatasetTestSRgan
+import numpy as np
 
 
 # ---------------PARAMETERS---------------#
 beta = 0.006
-lamb = 0.1
+lamb = 0.001
 vgglayer = 5
-number_epochs = 2
+number_epochs = 1
 pretrain_epochs = 2
 up_factor = 4
-batch_size = 1
+batch_size = 6
 learning_rate = 0.0001
 low_res_size = (328/4, 128/4)
 high_res_size = (328, 128)
@@ -29,20 +28,21 @@ ch_size = 3
 res_blocks = 16
 up_blocks = 2
 cutted_layer_vgg = 5
-test_during_epoch = False
-out_image_flag = True
-pre_train_flag = True
+test_during_epoch = True
+pre_train_flag = False
 continue_adv_train = False
-cuda = False
-weights_path = './weights'
-partial_image = './printed_image'
-dataset_folder = '../../remote/datasets/CelebA/'
-rap_folder = '../../datasets/'
+cuda = True
+
+
+eval_path = '/media/federico/Volume1/projects_results/srgan/eval_plot'
+weights_path = '/media/federico/Volume1/projects_results/srgan/weights'
+printed_image_path = '/media/federico/Volume1/projects_results/srgan/printed_image'
+logs_path = '/media/federico/Volume1/projects_results/srgan/logs'
+#rap_folder = '../../datasets/'
+rap_folder = '../../remote/datasets/'
 
 # ---------------TRANSFORM----------------#
-'''
-STD, MEAN SHOULD BE ADAPT TO THE USED DATASET
-'''
+
 normalization = transforms.Normalize(mean=[0.5, 0.5, 0.5],
                                      std=[1, 1, 1])
 
@@ -78,7 +78,7 @@ train_loader = torch.utils.data.DataLoader(dataset=train_folder,
                                            num_workers=2,
                                            drop_last=True)
 
-test_loader = torch.utils.data.DataLoader(dataset=train_folder,
+test_loader = torch.utils.data.DataLoader(dataset=test_folder,
                                           batch_size=batch_size,
                                           shuffle=True,
                                           num_workers=2,
@@ -113,25 +113,24 @@ if cuda:
     criterion_1.cuda()
     criterion_2.cuda()
     vgg16cut.cuda()
-    ones_labels.cuda()
-    zeros_labels.cuda()
+    ones_labels = ones_labels.cuda()
+    zeros_labels = zeros_labels.cuda()
 
 
-def generator_pre_training(epoch):
+def generator_pre_training(epoch, iter_print_loss, iter_print_image):
 
     g_net.train()
 
-    nips.title_line('GENERAOTR PRE-TRAINING')
+    nips.title_line('GENERAOTR-PRE-TRAINING')
+
+    total_round = 0.
+    avg_g_content_loss = 0.
 
     for i, data in enumerate(train_loader):
 
-        high_resolution_real, low_resolution = data['imagehig'], data['imagelow']
+        total_round += 1
 
-        if False:
-            save_image(unormalization(high_resolution_real[0]),
-                   'prova/pre_train%s_%s.png' % (epoch, 1))
-            save_image(unormalization(low_resolution[0]),
-                   'prova/pre_train%s_%s.png' % (epoch, 2))
+        high_resolution_real, low_resolution = data['imagehig'], data['imagelow']
 
         if cuda:
             high_resolution_real = Variable(high_resolution_real).cuda()
@@ -142,25 +141,29 @@ def generator_pre_training(epoch):
 
         g_net.zero_grad()
         content_loss = criterion_1(high_resolution_fake, high_resolution_real)
+        avg_g_content_loss += content_loss.data[0]
         content_loss.backward()
         g_optimizer.step()
 
-        if i % 50 == 0:
+        if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Generator Loss'] = ('%s: %.7f', content_loss)
             nips.log_line(epoch, i, tmp_dic)
             nipf.log_line(epoch, i, tmp_dic)
 
-        if i % 1000 == 0 and out_image_flag:
+        if i % iter_print_image == 0 and iter_print_image != 0:
             save_image(unormalization(high_resolution_real.data[0]),
-                       'printed_image/high_resolution_real/pre_train%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_real/pre_train_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(unormalization(high_resolution_fake.data[0]),
-                       'printed_image/high_resolution_fake/pre_train%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_fake/pre_train_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(unormalization(low_resolution[0]),
-                       'printed_image/low_resolution/pre_train%s_%s.png' % (epoch, i))
+                       '%s/low_resolution/pre_train_%s_%s.png' % (printed_image_path, epoch, i))
+
+    return avg_g_content_loss/total_round
 
 
-def adversarial_training(epoch):
+def adversarial_training(epoch, iter_print_loss, iter_print_image):
+    nips.title_line('TRAINING')
     g_net.train()
     d_net.train()
 
@@ -198,7 +201,6 @@ def adversarial_training(epoch):
         #-----------------GENERATOR----------------#
 
         g_net.zero_grad()
-        tmp = vgg16cut(high_resolution_real)
         real = Variable(vgg16cut(high_resolution_real).data)
         fake = vgg16cut(high_resolution_fake)
 
@@ -217,29 +219,30 @@ def adversarial_training(epoch):
         g_optimizer.step()
 
         total_round += 1
+        break
 
-        if i % 100 == 0:
+        if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Discriminator Loss'] = ('%s: %.7f ', d_loss)
             tmp_dic['Generator Content Loss'] = ('%s: %.7f ', g_content_loss)
             tmp_dic['Generator Adversarial Loss'] = ('%s: %.7f ', g_adversarial_loss)
             tmp_dic['Generator Total Loss'] = ('%s: %.7f ', g_total_loss)
             nips.log_line(epoch, i, tmp_dic)
-            nipf.log_line(epoch, i, tmp_dic)
+            nipftr.log_line(epoch, i, tmp_dic)
 
-        if i % 1000 == 0 and out_image_flag:
+        if i % iter_print_image == 0 and iter_print_image != 0:
             save_image(high_resolution_real.data[0],
-                       'printed_image/high_resolution_real/adverse_%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_real/adverse_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(high_resolution_fake.data[0],
-                       'printed_image/high_resolution_fake/adverse_%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_fake/adverse_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(low_resolution[0],
-                       'printed_image/low_resolution/adverse_%s_%s.png' % (epoch, i))
+                       '%s/low_resolution/adverse_%s_%s.png' % (printed_image_path, epoch, i))
 
     return avg_d_loss/total_round, avg_g_content_loss/total_round, avg_g_adv_loss/total_round, avg_g_tot_loss/total_round
 
 
-def testing(epoch):
-
+def testing(epoch, iter_print_loss, iter_print_image):
+    nips.title_line('TEST')
     g_net.eval()
     d_net.eval()
 
@@ -282,24 +285,25 @@ def testing(epoch):
         g_total_loss = g_content_loss + lamb * g_adversarial_loss
         avg_g_tot_loss += g_total_loss.data[0]
 
-        if i % 100 == 0:
+        if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Discriminator Loss'] = ('%s: %.7f ', d_loss)
             tmp_dic['Generator Content Loss'] = ('%s: %.7f ', g_content_loss)
             tmp_dic['Generator Adversarial Loss'] = ('%s: %.7f ', g_adversarial_loss)
             tmp_dic['Generator Total Loss'] = ('%s: %.7f ', g_total_loss)
             nips.log_line(epoch, i, tmp_dic)
-            nipf.log_line(epoch, i, tmp_dic)
+            nipfts.log_line(epoch, i, tmp_dic)
 
-        if i % 1000 == 0 and out_image_flag:
+        if i % iter_print_image == 0 and iter_print_image !=0:
             save_image(high_resolution_real.data[0],
-                       'printed_image/high_resolution_real/test_%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_real/test_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(high_resolution_fake.data[0],
-                       'printed_image/high_resolution_fake/test_%s_%s.png' % (epoch, i))
+                       '%s/high_resolution_fake/test_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(low_resolution[0],
-                       'printed_image/low_resolution/test_%s_%s.png' % (epoch, i))
+                       '%s/low_resolution/test_%s_%s.png' % (printed_image_path, epoch, i))
 
         total_round += 1
+
     return avg_d_loss/total_round, avg_g_content_loss/total_round, avg_g_adv_loss/total_round, avg_g_tot_loss/total_round
 
 
@@ -307,21 +311,32 @@ def testing(epoch):
 
 
 nips = NetworkInfoPrinter('', number_epochs, len(train_folder), batch_size)
-nipf = NetworkInfoPrinter('./logs/g_pretrain.txt', number_epochs, len(train_folder), batch_size)
+nipf = NetworkInfoPrinter('%s/g_pretrain.txt' % logs_path, number_epochs, len(train_folder), batch_size)
 
 
 if pre_train_flag:
-    for epoch in range(0, pretrain_epochs):
-        generator_pre_training(epoch)
+    gen_loss = []
 
+    for epoch_n in np.arange(0, pretrain_epochs):
+        gen_loss.append(generator_pre_training(epoch_n, 50, 500))
+
+    save_loss_plot('%s/pre_train_loss.png' % eval_path, 'Pre Train loss', np.arange(0, pretrain_epochs), gen_loss)
     nipf.end_print()
-    torch.save(g_net.state_dict(), '%s/generator_ptrain.pth' % (weights_path))
+    torch.save(g_net.state_dict(), '%s/generator_ptrain.pth' % weights_path)
+else:
+    if continue_adv_train:
+        print('ciao')
+    else:
+        g_pretrained_weights_dict = torch.load('%s/generator_ptrain.pth' % weights_path)
+        g_net.load_state_dict(g_pretrained_weights_dict)
+
 
 
 #---------------ADVERSARIAL-TRAINING--------------#
 
 
-nipf = NetworkInfoPrinter('./logs/advers_train.txt', number_epochs, len(train_folder), batch_size)
+nipftr = NetworkInfoPrinter('%s/advers_train.txt' % logs_path, number_epochs, len(train_folder), batch_size)
+nipfts = NetworkInfoPrinter('%s/advers_test.txt' % logs_path, number_epochs, len(train_folder), batch_size)
 
 d_loss_ltr = []
 g_content_loss_ltr = []
@@ -333,15 +348,17 @@ g_content_loss_lts = []
 g_adv_loss_lts = []
 g_tot_loss_lts = []
 
-for epoch in range(0, number_epochs):
+for epoch_n in np.arange(0, number_epochs):
 
-    loss_train = adversarial_training(epoch)
-    loss_test = testing(epoch)
-
+    loss_train = adversarial_training(epoch_n, 50, 1500)
+    if test_during_epoch:
+        loss_test = testing(epoch_n, 50, 1500)
+    '''
     d_loss_ltr.append(loss_train[0])
     g_content_loss_ltr.append(loss_train[1])
     g_adv_loss_ltr.append(loss_train[2])
     g_tot_loss_ltr.append(loss_train[3])
+    '''
 
     if test_during_epoch:
         d_loss_lts.append(loss_test[0])
@@ -349,20 +366,23 @@ for epoch in range(0, number_epochs):
         g_adv_loss_lts.append(loss_test[2])
         g_tot_loss_lts.append(loss_test[3])
 
-    '''
-    # remember best acc and save checkpoint
-    is_best = acc > best_acc
-    best_acc = max(acc, best_acc)
-    save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': tnet.state_dict(),
-        'best_prec1': best_acc,
-    }, is_best)
-    '''
 
-nipf.end_print()
+if test_during_epoch:
+    save_2loss_plot('%s/adv_disc_loss.png' % eval_path, 'Discriminator loss', ('Train', 'Test'), np.arange(0, number_epochs),
+                        d_loss_ltr, d_loss_lts)
+    save_2loss_plot('%s/adv_gen_loss.png' % eval_path, 'Generator loss', ('Train', 'Test'), np.arange(0, number_epochs),
+                        g_tot_loss_ltr, g_tot_loss_lts)
+else:
+    save_loss_plot('%s/adv_disc_loss.png' % eval_path, 'Discriminator loss',
+                        np.arange(0, number_epochs),
+                        d_loss_ltr)
+    save_loss_plot('%s/adv_gen_loss.png' % eval_path, 'Generator loss',
+                        np.arange(0, number_epochs),g_tot_loss_ltr)
+
+
+nipftr.end_print()
+nipfts.end_print()
 nips.end_print()
 
-torch.save(g_net.state_dict(), '%s/generator_final.pth' % (weights_path))
-torch.save(d_net.state_dict(), '%s/discriminator_final.pth' % (weights_path))
-
+torch.save(g_net.state_dict(), '%s/generator_final.pth' % weights_path)
+torch.save(d_net.state_dict(), '%s/discriminator_final.pth' % weights_path)

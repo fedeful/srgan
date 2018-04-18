@@ -1,6 +1,3 @@
-import argparse, os
-import torch
-import torch.nn as nn
 from __future__ import print_function
 import torch
 import torch.nn as nn
@@ -13,57 +10,35 @@ from torch.autograd import Variable
 import numpy as np
 import time, math, glob
 import scipy.io as sio
+import scipy.misc as misc
+from skimage.measure import compare_psnr, compare_ssim, structural_similarity
 from models import SRGanGenerator
-320*288
-low_res_size = 32
-ch_size = 3
-#---------------TRANSFORM----------------#
-'''
-STD, MEAN SHOULD BE ADAPT TO THE USED DATASET
-'''
-print_transform = transforms.Compose([
-    transforms.Normalize(mean=[-2.117, -2.035, -1.804],
-                         std=[4.366, 4.464, 4.444]),
-    transforms.ToPILImage()])
+from datasetloaders.rap_dataset import RAPDatasetTest, RAPDatasetTrainSRgan, RAPDatasetTestSRgan
+import matplotlib.pyplot as plt
+
+low_res_size = (328/4, 128/4)
+high_res_size = (328, 128)
+
+normalization = transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                     std=[1, 1, 1])
+
+unormalization = transforms.Normalize(mean=[-0.5, -0.5, -0.5],
+                                      std=[1, 1, 1])
 
 
-low_res_transform = transforms.Compose([
-    transforms.ToPILImage(),
-    transforms.Resize(low_res_size),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225])])
+
+pre_processing_hig = transforms.Compose([transforms.ToPILImage(),
+                                         transforms.Resize(high_res_size),
+                                         transforms.ToTensor(),
+                                         normalization])
+
+pre_processing_low = transforms.Compose([transforms.ToPILImage(),
+                                         transforms.Resize(low_res_size),
+                                         transforms.ToTensor(),
+                                         normalization])
 
 
-norm = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                            std=[0.229, 0.224, 0.225])
-
-u2 = transforms.Normalize(mean = [-2.118, -2.036, -1.804], std = [4.367, 4.464, 4.444])
-#-------------NETWORK-SETUP----------------#
-
-parser = argparse.ArgumentParser(description="PyTorch VDSR Eval")
-parser.add_argument("--cuda", action="store_true", help="use cuda?")
-parser.add_argument("--model", default="model/model_epoch_50.pth", type=str, help="model path")
-parser.add_argument("--dataset", default="Set5", type=str, help="dataset name, Default: Set5")
-parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
-
-
-final_path = './weights'
-dataset_folder = 'CelebA/'
-test_dataset = dsets.ImageFolder(root=dataset_folder,
-                                 transform=transforms.ToTensor())
-
-train_sampler, valid_sampler, test_sampler = 3, 2, 5
-# split_index_train_validation_test(len(train_dataset), 46, test_size, validation_size)
-
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                          batch_size=1,
-                                          sampler=train_sampler,
-                                          shuffle=True,
-                                          num_workers=2)
-
-
-def PSNR(pred, gt, shave_border=0):
+def psnr(pred, gt, shave_border=0):
     height, width = pred.shape[:2]
     pred = pred[shave_border:height - shave_border, shave_border:width - shave_border]
     gt = gt[shave_border:height - shave_border, shave_border:width - shave_border]
@@ -74,85 +49,95 @@ def PSNR(pred, gt, shave_border=0):
     return 20 * math.log10(255.0 / rmse)
 
 
-opt = parser.parse_args()
-cuda = opt.cuda
+def from_torch_to_numpy(image):
 
-if cuda:
-    print("=> use gpu id: '{}'".format(opt.gpus))
-    os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpus
-    if not torch.cuda.is_available():
-        raise Exception("No GPU found or Wrong gpu id, please run without --cuda")
+    image = image.cpu().data[0]
+    image = unormalization(image)
+    image = image.numpy().astype(np.float32)
+    image = image * 255.
+    image[image < 0] = 0
+    image[image > 255.] = 255.
+    image = image.transpose((1, 2, 0)).astype(np.uint8)
+    if True:
+        plt.imshow(image)
+        plt.show()
 
-g_net = SRGanGenerator(16, 2)
-g_pretrained_weights_dict = torch.load('%s/generator_final.pth' % (final_path))
-g_net.load_state_dict(g_pretrained_weights_dict)
-
-scales_factor = [2, 3, 4]
-
-image_list = glob.glob(opt.dataset + "_mat/*.*")
+    return image
 
 
-for scale in scales_factor:
-    avg_psnr_predicted = 0.0
-    avg_psnr_bicubic = 0.0
-    avg_elapsed_time = 0.0
-    count = 0.0
+def psnr_evaluation(data_loader, g_net, model_path, cuda, scale_factor,ev_metrics, up_metrics):
 
-    for i, data in enumerate(test_loader):
-        low_resolution = torch.FloatTensor(1, ch_size, low_res_size, low_res_size)
+    g_pretrained_weights_dict = torch.load('../%s/generator_ptrain.pth' % (model_path))
+    g_net.load_state_dict(g_pretrained_weights_dict)
+    g_net.eval()
+    if cuda:
+        g_net.cuda()
 
-        low_resolution = low_res_transform(high_resolution_real)
-        high_resolution_real = norm(high_resolution_real)
+    avg_ssim_predicted = 0.
+    avg_psnr_predicted = 0.
+    avg_ssim_bicubic = 0.
+    avg_psnr_bicubic = 0.
+    avg_ssim_nearest = 0.
+    avg_psnr_nearest = 0.
+    count = 0.
+
+    for i, data in enumerate(data_loader):
+
+        count += 1
+        high_resolution_real, low_resolution = data['imagehig'], data['imagelow']
 
         if cuda:
+            low_resolution = Variable(low_resolution).cuda()
             high_resolution_real = Variable(high_resolution_real).cuda()
-            high_resolution_fake = g_net(Variable(low_resolution).cuda())
+            high_resolution_fake = g_net(low_resolution)
         else:
+            low_resolution = Variable(low_resolution)
             high_resolution_real = Variable(high_resolution_real)
             high_resolution_fake = g_net(Variable(low_resolution))
 
-    for image_name in image_list:
-        if str(scale) in image_name:
-            count += 1
-            print("Processing ", image_name)
-            im_gt_y = sio.loadmat(image_name)['im_gt_y']
-            im_b_y = sio.loadmat(image_name)['im_b_y']
+        low_resolution = from_torch_to_numpy(low_resolution)
+        high_resolution_real = from_torch_to_numpy(high_resolution_real)
+        high_resolution_fake = from_torch_to_numpy(high_resolution_fake)
 
-            im_gt_y = im_gt_y.astype(float)
-            im_b_y = im_b_y.astype(float)
+        ssim_predicted = compare_ssim(high_resolution_real, high_resolution_fake, multichannel=True)
+        psnr_predicted = compare_psnr(high_resolution_real, high_resolution_fake)
+        avg_ssim_predicted += ssim_predicted
+        avg_psnr_predicted += psnr_predicted
 
-            psnr_bicubic = PSNR(im_gt_y, im_b_y, shave_border=scale)
-            avg_psnr_bicubic += psnr_bicubic
+        bicubic = misc.imresize(low_resolution, size=high_res_size, interp='bicubic')
+        ssim_bicubic = compare_ssim(high_resolution_real, bicubic, multichannel=True)
+        psnr_bicubic = compare_psnr(high_resolution_real, bicubic)
+        avg_ssim_bicubic += ssim_bicubic
+        avg_psnr_bicubic += psnr_bicubic
 
-            im_input = im_b_y / 255.
+        nearest = misc.imresize(low_resolution, size=high_res_size, interp='nearest')
+        ssim_nearest = compare_ssim(high_resolution_real, nearest, multichannel=True)
+        psnr_nearest = compare_psnr(high_resolution_real, nearest)
+        avg_ssim_nearest += ssim_nearest
+        avg_psnr_nearest += psnr_nearest
 
-            im_input = Variable(torch.from_numpy(im_input).float()).view(1, -1, im_input.shape[0], im_input.shape[1])
+    return avg_ssim_predicted/count, avg_psnr_predicted/count, avg_ssim_bicubic/count, \
+           avg_psnr_bicubic/count, avg_ssim_nearest/count, avg_psnr_nearest/count
 
-            if cuda:
-                model = model.cuda()
-                im_input = im_input.cuda()
-            else:
-                model = model.cpu()
 
-            start_time = time.time()
-            HR = model(im_input)
-            elapsed_time = time.time() - start_time
-            avg_elapsed_time += elapsed_time
+if __name__ == '__main__':
+    g_net = SRGanGenerator(16, 2)
+    rap_folder = '../../../remote/datasets/'
+    final_path = './weights'
+    remember ='34,28'
 
-            HR = HR.cpu()
+    test_folder = RAPDatasetTestSRgan(rap_folder,
+                                      rap_folder,
+                                      pre_processing_hig,
+                                      pre_processing_low)
 
-            im_h_y = HR.data[0].numpy().astype(np.float32)
+    test_loader = torch.utils.data.DataLoader(dataset=test_folder,
+                                              batch_size=1,
+                                              shuffle=True,
+                                              num_workers=2,
+                                              drop_last=True)
 
-            im_h_y = im_h_y * 255.
-            im_h_y[im_h_y < 0] = 0
-            im_h_y[im_h_y > 255.] = 255.
-            im_h_y = im_h_y[0, :, :]
 
-            psnr_predicted = PSNR(im_gt_y, im_h_y, shave_border=scale)
-            avg_psnr_predicted += psnr_predicted
 
-    print("Scale=", scale)
-    print("Dataset=", opt.dataset)
-    print("PSNR_predicted=", avg_psnr_predicted / count)
-    print("PSNR_bicubic=", avg_psnr_bicubic / count)
-    print("It takes average {}s for processing".format(avg_elapsed_time / count))
+    a = psnr_evaluation(test_loader, g_net, final_path, True, 2)
+    print(a)

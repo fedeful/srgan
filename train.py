@@ -6,10 +6,9 @@ import torchvision.datasets as dsets
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.optim import Adam
 from models import SRGanDiscriminator, SRGanGenerator, VggCutted
-from printutils import print_partial_result, NetworkInfoPrinter, save_partial_result
+from logdatautils.printutils import NetworkInfoPrinter
 from torchvision.utils import save_image
 
 #---------------PARAMETERS---------------#

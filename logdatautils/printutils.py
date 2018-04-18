@@ -1,12 +1,6 @@
 from __future__ import print_function
-import torch
-import torch.nn as nn
-import torchvision.datasets as dsets
-import torchvision.transforms as transforms
-from torch.autograd import Variable
 import numpy as np
 import matplotlib.pyplot as plt
-from torch.optim import Adam
 from PIL import Image
 
 

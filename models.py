@@ -119,7 +119,7 @@ class SRGanDiscriminator(nn.Module):
         self.bn7 = nn.BatchNorm2d(num_features=512)
         self.lr7 = nn.LeakyReLU(0.2)
 
-        self.dense1 = nn.Linear(8*8*512, 1024)
+        self.dense1 = nn.Linear(21*8*512, 1024)
         self.lr8 = nn.LeakyReLU(0.2)
         self.dense2 = nn.Linear(1024, 1)
 
