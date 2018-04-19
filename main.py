@@ -17,7 +17,7 @@ import numpy as np
 beta = 0.006
 lamb = 0.001
 vgglayer = 5
-number_epochs = 1
+number_epochs = 10
 pretrain_epochs = 2
 up_factor = 4
 batch_size = 6
@@ -313,10 +313,9 @@ def testing(epoch, iter_print_loss, iter_print_image):
 
 
 nips = NetworkInfoPrinter('', number_epochs, len(train_folder), batch_size)
-nipf = NetworkInfoPrinter('%s/g_pretrain.txt' % logs_path, number_epochs, len(train_folder), batch_size)
-
 
 if pre_train_flag:
+    nipf = NetworkInfoPrinter('%s/g_pretrain.txt' % logs_path, number_epochs, len(train_folder), batch_size)
     gen_loss = []
 
     for epoch_n in np.arange(0, pretrain_epochs):
@@ -352,9 +351,9 @@ g_tot_loss_lts = []
 
 for epoch_n in np.arange(0, number_epochs):
 
-    loss_train = adversarial_training(epoch_n, 50, 1500)
+    loss_train = adversarial_training(epoch_n, 50, 2000)
     if test_during_epoch:
-        loss_test = testing(epoch_n, 50, 1500)
+        loss_test = testing(epoch_n, 50, 2000)
     '''
     d_loss_ltr.append(loss_train[0])
     g_content_loss_ltr.append(loss_train[1])
