@@ -220,7 +220,7 @@ def adversarial_training(epoch, iter_print_loss, iter_print_image):
 
         total_round += 1
 
-        break
+
         if i % iter_print_loss == 0:
             tmp_dic = dict()
             tmp_dic['Discriminator Loss'] = ('%s: %.7f ', d_loss)
