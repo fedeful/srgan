@@ -34,10 +34,10 @@ continue_adv_train = False
 cuda = True
 
 
-eval_path = '/media/federico/Volume1/projects_results/srgan/eval_plot'
-weights_path = '/media/federico/Volume1/projects_results/srgan/weights'
-printed_image_path = '/media/federico/Volume1/projects_results/srgan/printed_image'
-logs_path = '/media/federico/Volume1/projects_results/srgan/logs'
+eval_path = '/home/federico/remote/projects/srgan/eval_plot'
+weights_path = '/home/federico/remote/projects/srgan/weights'
+printed_image_path = '/home/federico/remote/projects/srgan/printed_image'
+logs_path = '/home/federico/remote/projects/srgan/logs'
 #rap_folder = '../../datasets/'
 rap_folder = '../../remote/datasets/'
 
@@ -237,7 +237,7 @@ def adversarial_training(epoch, iter_print_loss, iter_print_image):
                        '%s/high_resolution_fake/adverse_%s_%s.png' % (printed_image_path, epoch, i))
             save_image(low_resolution[0],
                        '%s/low_resolution/adverse_%s_%s.png' % (printed_image_path, epoch, i))
-
+        
     return avg_d_loss/total_round, avg_g_content_loss/total_round, avg_g_adv_loss/total_round, avg_g_tot_loss/total_round
 
 
@@ -268,8 +268,8 @@ def testing(epoch, iter_print_loss, iter_print_image):
 
         # ----------------DISCRIMINATOR--------------
 
-        d_loss = criterion_2(d_net(high_resolution_real), ones_labels) + \
-                             criterion_2(d_net(Variable(high_resolution_fake.data, volatile=True)), zeros_labels).data[0]
+        d_loss = (criterion_2(d_net(high_resolution_real), ones_labels) + \
+                             criterion_2(d_net(Variable(high_resolution_fake.data, volatile=True)), zeros_labels)).data[0]
         avg_d_loss += d_loss
 
 
@@ -337,7 +337,7 @@ else:
 
 
 nipftr = NetworkInfoPrinter('%s/advers_train.txt' % logs_path, number_epochs, len(train_folder), batch_size)
-nipfts = NetworkInfoPrinter('%s/advers_test.txt' % logs_path, number_epochs, len(train_folder), batch_size)
+nipfts = NetworkInfoPrinter('%s/advers_test.txt' % logs_path, number_epochs, len(test_folder), batch_size)
 
 d_loss_ltr = []
 g_content_loss_ltr = []
@@ -354,12 +354,11 @@ for epoch_n in np.arange(0, number_epochs):
     loss_train = adversarial_training(epoch_n, 50, 2000)
     if test_during_epoch:
         loss_test = testing(epoch_n, 50, 2000)
-    '''
+
     d_loss_ltr.append(loss_train[0])
     g_content_loss_ltr.append(loss_train[1])
     g_adv_loss_ltr.append(loss_train[2])
     g_tot_loss_ltr.append(loss_train[3])
-    '''
 
     if test_during_epoch:
         d_loss_lts.append(loss_test[0])
