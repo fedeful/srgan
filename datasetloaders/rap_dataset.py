@@ -200,7 +200,7 @@ class RAP:
     def get_img_path(self, img_id):
         return osp.join(self._db_path, 'RAP_dataset', self._img_names[img_id][0][0])
 
-
+'''
 def pippo():
     db = RAP('/home/fede/datasets/', 0)
     print db._partition.shape
@@ -220,7 +220,7 @@ def pippo():
     plt.imshow(sample['image'])
     plt.show()
     print tdataset.get_labels_name()
-
+'''
 
 def calulate_avg_dataset():
     tdataset = RAPDatasetComplete('/home/fede/datasets/',
